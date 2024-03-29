@@ -1,30 +1,58 @@
 import requests
 from bs4 import BeautifulSoup
-import re
+import json
 
-# url = 'https://quotes.toscrape.com/'
-# response = requests.get(url)
-# soup = BeautifulSoup(response.text, 'lxml')
-# quotes = soup.find_all('span', class_='text')
-# authors = soup.find_all('small', class_='author')
-# tags = soup.find_all('div', class_='tags')
-#
-# for i in range(0, len(quotes)):
-#     print(quotes[i].text)
-#     print('--' + authors[i].text)
-#     tagsforquote = tags[i].find_all('a', class_='tag')
-#     for tagforquote in tagsforquote:
-#         print(tagforquote.text)
-#     break
-url = 'https://index.minfin.com.ua/ua/russian-invading/casualties/'
-def get_urls():
-    urls_list = []
-    html_doc = requests.get(url)
-    soup = BeautifulSoup(html_doc.text, 'html.parser')
-    content = soup.select('div[class=ajaxmonth] h4[class=normal] a')
-    prefix = 'month.php? month='
-    for link in content:
-        url = prefix + re.search(r"\d{4}-\d{2}", link['href']).group()
-        urls_list.append()
+URL = "https://quotes.toscrape.com"
 
-if __name__ == '__main__':
+
+def page_scrape(url, authors, quotes) -> str | None:
+    def authors_scrape(authors_url, authors):
+        response = requests.get(authors_url)
+        soup = BeautifulSoup(response.text, 'lxml')
+        fullname = soup.find("h3", class_="author-title").get_text().strip()
+        born_date = soup.find("span", class_="author-born-date").get_text().strip()
+        born_location = soup.find("span", class_="author-born-location").get_text().strip()
+        description = soup.find("div", class_="author-description").get_text().strip()
+        authors.append(
+            {"fullname": fullname, "born_date": born_date, "born_location": born_location, "description": description})
+
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "lxml")
+    page_quotes = soup.find_all('span', class_='text')
+    page_authors = soup.find_all('small', class_='author')
+    page_tags = soup.find_all('div', class_='tags')
+    page_about = soup.select("[href^='/author']")
+    for a in page_about:
+        authors_url = URL + a['href']
+        authors_scrape(authors_url, authors)
+
+    for i in range(0, len(page_quotes)):
+        tag_list = []
+        tagsforquote = page_tags[i].find_all('a', class_='tag')
+        for tagforquote in tagsforquote:
+            tag_list.append(tagforquote.text)
+        quotes.append({"tags": tag_list, "author": page_authors[i].text, "quote": page_quotes[i].text})
+
+    next_url = soup.find('li', class_='next')
+    if not next_url:
+        return None
+    next_url = URL + next_url.find('a')['href']
+    # print(next_url)
+    return next_url
+
+
+if __name__ == "__main__":
+    authors = []
+    quotes = []
+    new_url = URL
+    while True:
+        new_url = page_scrape(new_url, authors, quotes)
+        if not new_url:
+            break
+
+    # Збереження даних у файли JSON
+    with open("quotes.json", "w", encoding='utf-8') as file:
+        json.dump(quotes, file, ensure_ascii=False, indent=4)
+
+    with open("authors.json", "w", encoding='utf-8') as file:
+        json.dump(authors, file, ensure_ascii=False, indent=4)
